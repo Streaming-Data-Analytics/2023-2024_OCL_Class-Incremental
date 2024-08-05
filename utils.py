@@ -1,7 +1,8 @@
 import os
 import torchvision
 import torch
-from avalanche.benchmarks.utils import AvalancheDataset, DataAttribute, as_taskaware_classification_dataset
+from avalanche.benchmarks.utils import AvalancheDataset, DataAttribute, as_taskaware_classification_dataset, as_classification_dataset
+from avalanche.benchmarks.scenarios.online import split_online_stream
 
 def load_CLEAR(folder: str, transform=None):
     folders = sorted(os.listdir(folder))
@@ -31,7 +32,7 @@ def load_CLEAR(folder: str, transform=None):
                     all_images[subfolder][class_folder] = torch.stack(images) / 255
     return all_images
 
-def build_CLEAR_experiences(CLEAR_dict, classes_pairs, mb_size: int=10, n_classes: int=2):
+def build_CLEAR_train_experiences(CLEAR_dict, classes_pairs, mb_size: int=10, n_classes: int=2):
     tasks = {task_label: task_classes for task_label, task_classes in enumerate(classes_pairs)}
     experiences = []
     for task_label, task_classes in tasks.items():
@@ -79,4 +80,44 @@ def build_CLEAR_experiences(CLEAR_dict, classes_pairs, mb_size: int=10, n_classe
                 class_dataset = as_taskaware_classification_dataset(av_dataset)
                 # Append the current dataset to the whole set of experiences
                 experiences.append(class_dataset)
+    return experiences
+
+def build_CLEAR_test_experiences(CLEAR_dict, classes_pairs, n_classes: int=2):
+    tasks = dict(enumerate(classes_pairs))
+    experiences = []
+    for task_label, task_classes in tasks.items():
+        # Concatenate the features for both the classes
+        x_data = torch.vstack(
+            tuple(
+                CLEAR_dict[str(time)][curr_class] for curr_class in task_classes if curr_class is not None \
+                    for time in range(1, 11)
+            )
+        )
+        # Compute the number of samples for each class
+        n_samples_per_class = [
+            sum(len(CLEAR_dict[str(time)][curr_class]) for time in range(1, 11)) \
+                for curr_class in task_classes if curr_class is not None
+        ]
+        
+        # Build the class labels for both the classes
+        class_labels = torch.concatenate(
+            tuple(
+                torch.ones(n_samples, dtype=torch.int8) * (i + n_classes * task_label) \
+                    for i, n_samples in enumerate(n_samples_per_class)
+            )
+        )
+        # Build the task labels for both the classes
+        #task_labels = torch.ones(len(x_data), dtype=torch.int8) * task_label
+        # Build torch and Avalanche dataset
+        torch_data = torch.utils.data.dataset.TensorDataset(x_data)
+        av_dataset = AvalancheDataset(
+            datasets=torch_data,
+            data_attributes=[
+                #DataAttribute(task_labels, name="targets_task_labels", use_in_getitem=True),
+                DataAttribute(class_labels, name="targets", use_in_getitem=True)
+            ]
+        )
+        class_dataset = as_classification_dataset(av_dataset)
+        # Append the current dataset to the whole set of experiences
+        experiences.append(class_dataset)
     return experiences
