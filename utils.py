@@ -1,7 +1,9 @@
 import os
 import torchvision
 import torch
+from typing import Optional
 from avalanche.benchmarks.utils import AvalancheDataset, DataAttribute, as_taskaware_classification_dataset
+from avalanche.training.storage_policy import ClassBalancedBuffer
 
 def load_CLEAR(folder: str, transform=None):
     folders = sorted(os.listdir(folder))
@@ -81,24 +83,38 @@ def load_CLEAR(folder: str, transform=None):
                 experiences.append(class_dataset)
     return experiences"""
 
-def build_CLEAR_train_experiences(CLEAR_dict, classes_pairs, n_classes: int=2):
+def build_CLEAR_train_experiences(CLEAR_dict, classes_pairs, n_classes: int=2,
+                                  subsample: Optional[int]=None):
     tasks = dict(enumerate(classes_pairs))
     experiences = []
     for task_label, task_classes in tasks.items():
         curr_experience_features = []
         curr_experience_labels = []
         for time in range(1, 11):
-            # Concatenate the features for both the classes
-            x_data = torch.vstack(
-                tuple(
-                    CLEAR_dict[str(time)][curr_class] for curr_class in task_classes if curr_class is not None
+            if subsample:
+                # Concatenate the features for both the classes
+                x_data = torch.vstack(
+                    tuple(
+                        CLEAR_dict[str(time)][curr_class][:subsample] for curr_class in task_classes if curr_class is not None
+                    )
                 )
-            )
-            # Compute the number of samples for each class
-            n_samples_per_class = [
-                len(CLEAR_dict[str(time)][curr_class]) \
-                                    for curr_class in task_classes if curr_class is not None
-            ]
+                # Compute the number of samples for each class
+                n_samples_per_class = [
+                    len(CLEAR_dict[str(time)][curr_class][:subsample]) \
+                                        for curr_class in task_classes if curr_class is not None
+                ]
+            else:
+                # Concatenate the features for both the classes
+                x_data = torch.vstack(
+                    tuple(
+                        CLEAR_dict[str(time)][curr_class] for curr_class in task_classes if curr_class is not None
+                    )
+                )
+                # Compute the number of samples for each class
+                n_samples_per_class = [
+                    len(CLEAR_dict[str(time)][curr_class]) \
+                                        for curr_class in task_classes if curr_class is not None
+                ]
             # Build the class labels for both the classes
             class_labels = torch.concatenate(
                 tuple(
