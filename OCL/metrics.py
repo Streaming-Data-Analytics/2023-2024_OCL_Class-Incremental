@@ -21,7 +21,7 @@ def AF(accuracy_df, steps_per_experience, n_experiences):
         f"AF_experience_{j}": (accuracies_by_experience[f"accuracies_exp_{j}"] - final_accuracy_by_experience)[
             [f"accuracy_task_{i}" for i in range(0, j)]].mean(axis=1) for j in range(1, n_experiences)
     }
-    return pd.concat([af for af in average_forg.values()])
+    return pd.concat([None for _ in range(steps_per_experience)] + [af for af in average_forg.values()])
 
 def min_ACC(accuracy_df, steps_per_experience, n_experiences):
     """
@@ -46,7 +46,7 @@ def min_ACC(accuracy_df, steps_per_experience, n_experiences):
     average_minimum_accuracy = [
         np.mean(value) for value in minimum_accuracy_previous_experiences.values()
     ]
-    return average_minimum_accuracy
+    return [None] + average_minimum_accuracy
 
 def WC_ACC(accuracy_df, steps_per_experience, n_experiences):
     # This dictionary contains the test accuracies on all the test Experiences,
@@ -67,6 +67,24 @@ def WC_ACC(accuracy_df, steps_per_experience, n_experiences):
         accuracy_df=accuracy_df,
         steps_per_experience=steps_per_experience,
         n_experiences=n_experiences
-    )
+    )[1:]
     wc_acc = [(final_accuracy_by_experience[i] / i) + (1 - 1 / i) * min_acc[i-1] for i in range(1, n_experiences)]
-    return wc_acc
+    return [None] + wc_acc
+
+def current_accuracy(accuracy_df, steps_per_experience, n_experiences):
+    current_accuracies = {}
+    for n in range(n_experiences):
+        begin_idx = n * steps_per_experience
+        end_idx = (n + 1) * steps_per_experience - 1
+        current_accuracies[f"accuracy_task_{n}"] = accuracy_df.loc[begin_idx:end_idx, f"accuracy_task_{n}"]
+    return current_accuracies
+
+def previous_accuracy(accuracy_df, steps_per_experience, n_experiences):
+    accuracies_by_experience = {
+    f"accuracies_exp_{i}": accuracy_df.loc[
+        (i * steps_per_experience) : (i+1) * steps_per_experience - 1,
+        [f"accuracy_task_{j}" for j in range(0, i)]
+        ] for i in range(n_experiences)
+    }
+    accuracies_by_experience.pop("accuracies_exp_0")
+    return accuracies_by_experience

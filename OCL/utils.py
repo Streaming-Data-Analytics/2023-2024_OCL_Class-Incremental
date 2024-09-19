@@ -3,7 +3,6 @@ import torchvision
 import torch
 from typing import Optional
 from avalanche.benchmarks.utils import AvalancheDataset, DataAttribute, as_taskaware_classification_dataset
-from avalanche.training.storage_policy import ClassBalancedBuffer
 
 def load_CLEAR(folder: str, transform=None):
     folders = sorted(os.listdir(folder))
@@ -32,56 +31,6 @@ def load_CLEAR(folder: str, transform=None):
                         all_images[subfolder] = {}
                     all_images[subfolder][class_folder] = torch.stack(images) / 255
     return all_images
-
-"""def build_CLEAR_train_experiences(CLEAR_dict, classes_pairs, mb_size: int=10, n_classes: int=2):
-    tasks = {task_label: task_classes for task_label, task_classes in enumerate(classes_pairs)}
-    experiences = []
-    for task_label, task_classes in tasks.items():
-        for time in range(1, 11):
-            # Concatenate the features for both the classes
-            x_data = torch.vstack(
-                tuple(
-                    CLEAR_dict[str(time)][curr_class] for curr_class in task_classes if curr_class is not None
-                )
-            )
-            # Compute the number of samples for each class
-            n_samples_per_class = [
-                len(CLEAR_dict[str(time)][curr_class]) \
-                                    for curr_class in task_classes if curr_class is not None
-            ]
-            # Build the class labels for both the classes
-            class_labels = torch.concatenate(
-                tuple(
-                    torch.ones(n_samples, dtype=torch.int8) * (i + n_classes * task_label) \
-                        for i, n_samples in enumerate(n_samples_per_class)
-                )
-            )
-            # Build the task labels for both the classes
-            task_labels = torch.ones(len(x_data), dtype=torch.int8) * task_label
-            # Split the current task (n classes + fixed year) in minibatches, 
-            # and shuffle so that each minibatch contains both classes
-            permutations = torch.randperm(len(x_data))
-            features_perm = x_data[permutations]
-            class_labels_perm = class_labels[permutations]
-            task_labels_perm = task_labels[permutations]
-            for mb_pos in range(0, len(features_perm), mb_size):
-                # Shuffle the samples
-                features_mb = features_perm[mb_pos:(mb_pos+mb_size)]
-                class_labels_mb = class_labels_perm[mb_pos:(mb_pos+mb_size)]
-                task_labels_mb = task_labels_perm[mb_pos:(mb_pos+mb_size)]
-                # Build the torch dataset and the Avalanche dataset 
-                torch_data = torch.utils.data.dataset.TensorDataset(features_mb)
-                av_dataset = AvalancheDataset(
-                    datasets=torch_data,
-                    data_attributes=[
-                        DataAttribute(task_labels_mb, name="targets_task_labels", use_in_getitem=True),
-                        DataAttribute(class_labels_mb, name="targets", use_in_getitem=True)
-                    ]
-                )
-                class_dataset = as_taskaware_classification_dataset(av_dataset)
-                # Append the current dataset to the whole set of experiences
-                experiences.append(class_dataset)
-    return experiences"""
 
 def build_CLEAR_train_experiences(CLEAR_dict, classes_pairs, n_classes: int=2,
                                   subsample: Optional[int]=None):
@@ -184,3 +133,16 @@ def build_CLEAR_test_experiences(CLEAR_dict, classes_pairs, n_classes: int=2):
         # Append the current dataset to the whole set of experiences
         experiences.append(class_dataset)
     return experiences
+
+def extract_kwargs(extract, kwargs):
+    """
+    checks and extracts
+    the arguments
+    listed in extract
+    """
+    init_dict = {}
+    for word in extract:
+        if word not in kwargs:
+            raise AttributeError(f"Missing attribute {word} in provided configuration")
+        init_dict.update({word: kwargs[word]})
+    return init_dict
